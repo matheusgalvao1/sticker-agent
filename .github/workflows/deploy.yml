@@ -1,0 +1,15 @@
+name: Deploy
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: sticker-agent-deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --app sticker-agent --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
