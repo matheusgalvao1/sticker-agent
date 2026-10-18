@@ -1,0 +1,38 @@
+# Single machine on purpose: SQLite lives on one volume and is not shared between machines.
+app = 'sticker-agent'
+primary_region = 'gru'
+
+[build]
+
+[env]
+  NODE_ENV = 'production'
+  HOST = '0.0.0.0'
+  PORT = '8080'
+  DATABASE_PATH = '/data/sticker-agent.db'
+  OPENROUTER_SITE_URL = 'https://sticker-agent.fly.dev'
+  OPENROUTER_APP_NAME = 'Sticker Agent'
+  MEMORY_TTL_MINUTES = '15'
+  DAILY_GENERATION_LIMIT = '20'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = '15s'
+    interval = '30s'
+    method = 'GET'
+    path = '/health'
+    timeout = '5s'
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[[mounts]]
+  source = 'sticker_agent_data'
+  destination = '/data'
