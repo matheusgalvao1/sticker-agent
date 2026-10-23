@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DailyGenerationLimit } from '../../src/agent/budget.js';
 import { openDatabase } from '../../src/db/database.js';
 
-const sender = '5542998420077';
+const sender = '5542998765432';
 const noon = Date.UTC(2026, 9, 18, 12);
 
 describe('DailyGenerationLimit', () => {

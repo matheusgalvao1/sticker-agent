@@ -7,11 +7,11 @@ describe('normalizePhoneNumber', () => {
   });
 
   it('maps a Brazilian mobile without the extra 9 to the 13-digit form', () => {
-    expect(normalizePhoneNumber('554298420077')).toBe('5542998420077');
+    expect(normalizePhoneNumber('554298765432')).toBe('5542998765432');
   });
 
   it('leaves the 13-digit Brazilian mobile form unchanged', () => {
-    expect(normalizePhoneNumber('+55 42 998420077')).toBe('5542998420077');
+    expect(normalizePhoneNumber('+55 42 98765432')).toBe('5542998765432');
   });
 
   it('leaves Brazilian landlines unchanged', () => {
