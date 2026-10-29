@@ -8,6 +8,7 @@ import { openDatabase } from '../../src/db/database.js';
 import { PendingInputs } from '../../src/jobs/pending-inputs.js';
 import type { ImageGenerator } from '../../src/openrouter/image-generator.js';
 import { loadMediaSpec } from '../../src/sim/fixtures.js';
+import { FakeMessenger } from '../../src/sim/fake-messenger.js';
 import { StubImageGenerator } from '../../src/sim/stub-image-generator.js';
 
 const sender = 'routing-test';
@@ -16,6 +17,7 @@ interface Harness {
   agent: StickerAgent;
   assets: AssetStore;
   model: ScriptedModel;
+  messenger: FakeMessenger;
 }
 
 function setup(
@@ -25,6 +27,7 @@ function setup(
   const clock = { now: () => 1_000 };
   const assets = new AssetStore(60_000, clock);
   const model = new ScriptedModel(script);
+  const messenger = new FakeMessenger();
   const agent = new StickerAgent({
     config: {
       apiKey: 'test',
@@ -37,11 +40,12 @@ function setup(
     assets,
     sessions: new InMemoryAgentSessionStore(60_000, clock),
     budget: new DailyGenerationLimit(openDatabase(':memory:'), options.dailyLimit ?? 20, clock),
+    whatsapp: messenger,
     notifyGenerationStart: options.notifyGenerationStart,
     pendingInputs: options.pendingInputs,
     modelProvider: { getModel: () => model },
   });
-  return { agent, assets, model };
+  return { agent, assets, model, messenger };
 }
 
 async function attach(assets: AssetStore, kind: 'sticker' | 'image', spec: string): Promise<string> {
@@ -269,6 +273,42 @@ describe('StickerAgent routing', () => {
 
     expect(result.stickerIds).toEqual(['sticker_2']);
     expect(result.text).toBe('Pronto! ✨');
+  });
+
+  it('sends the sticker through WhatsApp inside send_sticker itself', async () => {
+    const { agent, assets, messenger, model } = setup([
+      [sendSticker('sticker_1', 'c1')],
+      [assistantMessage('Tá aí!')],
+    ]);
+    await attach(assets, 'sticker', 'sticker:red');
+
+    const result = await agent.runTurn({ sender, userText: 'manda a figurinha', newAssetIds: [] });
+
+    expect(result.stickerIds).toEqual(['sticker_1']);
+    expect(messenger.outbound).toEqual([{ type: 'sticker', to: sender, data: expect.any(Buffer) }]);
+    expect(result.trace[0]?.result).toMatchObject({ ok: true, asset_id: 'sticker_1' });
+    model.assertComplete();
+  });
+
+  it('surfaces a real send failure to the model instead of claiming success', async () => {
+    const stickerIds = ['sticker_1'];
+    const { agent, assets, messenger, model } = setup([
+      [sendSticker('sticker_1', 'c1')],
+      [sendSticker('sticker_1', 'c2')],
+      [assistantMessage('Foi, agora em!')],
+    ]);
+    await attach(assets, 'sticker', 'sticker:red');
+    const send = vi.spyOn(messenger, 'sendSticker');
+    send.mockRejectedValueOnce(new Error('HTTP 131051 unsupported media type'));
+
+    const result = await agent.runTurn({ sender, userText: 'manda de novo', newAssetIds: [] });
+
+    expect(result.trace[0]?.result).toMatchObject({
+      error: expect.stringContaining('WhatsApp rejected the sticker: HTTP 131051'),
+    });
+    expect(result.stickerIds).toEqual(['sticker_1']);
+    expect(messenger.outbound.filter((message) => message.type === 'sticker')).toHaveLength(1);
+    model.assertComplete();
   });
 
   it('describes the attached assets to the model on every turn', async () => {

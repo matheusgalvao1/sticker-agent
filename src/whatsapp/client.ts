@@ -1,4 +1,4 @@
-import type { Messenger, MediaAsset } from '../messaging.js';
+import type { Messenger, MediaAsset, SendOutcome } from '../messaging.js';
 
 export interface WhatsAppClientConfig {
   accessToken: string;
@@ -76,8 +76,8 @@ export class WhatsAppCloudClient implements Messenger {
     };
   }
 
-  async sendText(recipient: string, body: string): Promise<void> {
-    await this.postMessage({
+  async sendText(recipient: string, body: string): Promise<SendOutcome> {
+    return await this.postMessage({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: recipient,
@@ -86,7 +86,7 @@ export class WhatsAppCloudClient implements Messenger {
     });
   }
 
-  async sendSticker(recipient: string, stickerWebp: Buffer): Promise<void> {
+  async sendSticker(recipient: string, stickerWebp: Buffer): Promise<SendOutcome> {
     if (stickerWebp.byteLength > 100_000) {
       throw new Error('Sticker WebP must be no larger than 100 KB.');
     }
@@ -105,7 +105,7 @@ export class WhatsAppCloudClient implements Messenger {
     const upload = await readJson<GraphMediaUploadResponse>(uploadResponse, 'WhatsApp sticker upload');
     if (!upload.id) throw new Error('WhatsApp did not return an uploaded media ID.');
 
-    await this.postMessage({
+    return await this.postMessage({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: recipient,
@@ -114,7 +114,7 @@ export class WhatsAppCloudClient implements Messenger {
     });
   }
 
-  private async postMessage(payload: Record<string, unknown>): Promise<void> {
+  private async postMessage(payload: Record<string, unknown>): Promise<SendOutcome> {
     const response = await this.fetcher(`${this.graphBaseUrl}/${this.config.phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
@@ -125,7 +125,8 @@ export class WhatsAppCloudClient implements Messenger {
       signal: AbortSignal.timeout(30_000),
     });
 
-    await readJson<Record<string, unknown>>(response, 'WhatsApp send message');
+    const sent = await readJson<{ messages?: Array<{ id?: string }> }>(response, 'WhatsApp send message');
+    return { wamid: sent.messages?.[0]?.id ?? null };
   }
 }
 

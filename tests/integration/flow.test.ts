@@ -97,6 +97,17 @@ describe('end-to-end flow through the webhook', () => {
     expect(metadata.height).toBe(512);
 
     expect(replies[2]).toMatchObject({ body: 'Aqui está, com chapéu!' });
+
+    // The audit trail: every successful outbound send is recorded in SQLite —
+    // welcome, "Oi" reply, question, ack, sticker (sent inside the tool), final text.
+    const deliveries = services.db.prepare(`SELECT kind, status, wamid FROM delivery_log ORDER BY id`).all();
+    expect(deliveries[0]).toMatchObject({ kind: 'text', status: 'sent' });
+    expect(deliveries[1]).toMatchObject({ kind: 'text', status: 'sent' });
+    expect(deliveries[2]).toMatchObject({ kind: 'text', status: 'sent' });
+    expect(deliveries[3]).toMatchObject({ kind: 'text', status: 'sent', wamid: expect.stringContaining('fake-') });
+    expect(deliveries[4]).toMatchObject({ kind: 'sticker', status: 'sent', wamid: expect.stringContaining('fake-') });
+    expect(deliveries[5]).toMatchObject({ kind: 'text', status: 'sent' });
+    expect(deliveries).toHaveLength(6);
     model.assertComplete();
   });
 

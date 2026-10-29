@@ -14,20 +14,20 @@ Every successful turn returns a sticker and a short Portuguese reply. See `docs/
 ## Architecture
 
 - **Fastify** receives Meta's webhook and verifies `X-Hub-Signature-256`. Each new message is saved as a job in SQLite before the webhook is acknowledged. Jobs run in a per-sender queue: bursts of messages are merged into one turn after a short grace window (`BATCH_WINDOW_SECONDS`, 5 seconds by default), and messages sent while a turn runs are attached to the agent's next tool result, so it adapts instead of restarting.
-- **Bot** (`src/bot/sticker-bot.ts`) downloads incoming media into the conversation's asset store, runs one agent turn, then sends any stickers and the reply text.
+- **Bot** (`src/bot/sticker-bot.ts`) downloads incoming media into the conversation's asset store and runs one agent turn for the batch; the final reply text is sent after the turn.
 - **Asset store** (`src/assets/store.ts`) keeps each sender's stickers and images with short IDs (`sticker_1`, `image_2`). Memory expires after `MEMORY_TTL_MINUTES` of inactivity.
 - **Agent** (`src/agent/sticker-agent.ts`) uses the OpenAI Agents SDK through OpenRouter's Chat Completions endpoint. It has four tools:
   - `list_assets`: show the conversation's stickers and images.
   - `generate_image`: call the image model with a prompt and optional references.
   - `make_sticker`: convert an image to a WhatsApp sticker (no AI).
-  - `send_sticker`: mark a sticker for delivery with the reply.
+  - `send_sticker`: send the sticker to the user right now through WhatsApp — the tool result is the real delivery outcome, and the agent says the sticker was sent only when it returned `ok`.
 - **Image model** (`src/openrouter/image-generator.ts`) calls OpenRouter's `POST /api/v1/images` with `input_references`. The default model is `openai/gpt-image-2.5-sunburst`.
 - **Sticker pipeline** (`src/sticker/normalize.ts`) produces 512×512 WebP files under 100 KB. It also converts stickers to PNG and photos to JPEG for the image model, and rejects animated stickers.
 - **Accounts** (`src/accounts/service.ts`) are keyed by WhatsApp number. The first message from an allowed number creates the account and sends a short welcome. There is no email or web sign-up.
-- **Database** (`src/db/database.ts`) is SQLite via `better-sqlite3`, at `DATABASE_PATH`. It stores accounts, message jobs, and daily generation counts. Conversation memory is in-process only.
+- **Database** (`src/db/database.ts`) is SQLite via `better-sqlite3`, at `DATABASE_PATH`. It stores accounts, message jobs, daily generation counts, and an audit log of every outbound message (`delivery_log` — successful sends carry Meta's message id, failures carry the reason). Conversation memory is in-process only.
 - **Services** (`src/services.ts`) wires everything together. Tests and the local harness replace WhatsApp and the image model with fakes.
 
-Only numbers in `WHATSAPP_ALLOWED_NUMBERS` reach the bot. Daily generation Daily generation is capped per sender by `DAILY_GENERATION_LIMIT`. A generation that fails is refunded.
+Only numbers in `WHATSAPP_ALLOWED_NUMBERS` reach the bot. Daily generation is capped per sender by `DAILY_GENERATION_LIMIT`. A generation that fails is refunded.
 
 ## Requirements
 

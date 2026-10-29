@@ -1,4 +1,4 @@
-import type { Messenger, MediaAsset } from '../messaging.js';
+import type { Messenger, MediaAsset, SendOutcome } from '../messaging.js';
 
 export type OutboundMessage =
   | { type: 'text'; to: string; body: string }
@@ -17,12 +17,14 @@ export class FakeMessenger implements Messenger {
     return asset;
   }
 
-  async sendText(to: string, body: string): Promise<void> {
+  async sendText(to: string, body: string): Promise<SendOutcome> {
     await this.record({ type: 'text', to, body });
+    return { wamid: `fake-${this.outbound.length}` };
   }
 
-  async sendSticker(to: string, stickerWebp: Buffer): Promise<void> {
+  async sendSticker(to: string, stickerWebp: Buffer): Promise<SendOutcome> {
     await this.record({ type: 'sticker', to, data: stickerWebp });
+    return { wamid: `fake-${this.outbound.length}` };
   }
 
   private async record(message: OutboundMessage): Promise<void> {

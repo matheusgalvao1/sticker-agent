@@ -28,6 +28,18 @@ CREATE TABLE IF NOT EXISTS generation_usage (
   count INTEGER NOT NULL,
   PRIMARY KEY (sender, day)
 );
+
+CREATE TABLE IF NOT EXISTS delivery_log (
+  id INTEGER PRIMARY KEY,
+  sender TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  wamid TEXT,
+  body TEXT,
+  bytes INTEGER,
+  error TEXT,
+  created_at INTEGER NOT NULL
+);
 `;
 
 export function openDatabase(path: string): Db {

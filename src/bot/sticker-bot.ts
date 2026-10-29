@@ -99,7 +99,7 @@ export class StickerBotService {
     return { text, newAssetIds, skip: false };
   }
 
-  /** One agent turn for a burst of messages, then delivery of the stickers and the final text. */
+  /** One agent turn for a burst of messages, then delivery of the final text. The agent sends its own stickers. */
   async runBatch(sender: string, texts: string[], newAssetIds: string[]): Promise<void> {
     const userText = texts.filter((text) => text.length > 0).join('\n');
 
@@ -109,16 +109,6 @@ export class StickerBotService {
     } catch {
       await this.dependencies.whatsapp.sendText(sender, 'Tive um problema ao processar sua mensagem. Pode tentar de novo?');
       return;
-    }
-
-    for (const id of turn.stickerIds) {
-      const asset = this.dependencies.assets.get(sender, id);
-      if (!asset) continue;
-      try {
-        await this.dependencies.whatsapp.sendSticker(sender, asset.data);
-      } catch {
-        await this.dependencies.whatsapp.sendText(sender, 'Criei o sticker, mas não consegui enviá-lo. Pode pedir de novo?');
-      }
     }
 
     if (turn.text) await this.dependencies.whatsapp.sendText(sender, turn.text);

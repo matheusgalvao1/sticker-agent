@@ -6,6 +6,7 @@ import type { Clock } from '../clock.js';
 import type { PendingInputs } from '../jobs/pending-inputs.js';
 import type { ImageGenerator } from '../openrouter/image-generator.js';
 import { normalizeSticker, toModelReference, type ModelReference } from '../sticker/normalize.js';
+import type { Messenger } from '../messaging.js';
 import type { DailyGenerationLimit } from './budget.js';
 
 export interface AgentConfig {
@@ -81,6 +82,7 @@ export interface StickerAgentDependencies {
   assets: AssetStore;
   sessions: AgentSessionStore;
   budget: DailyGenerationLimit;
+  whatsapp: Messenger;
   notifyGenerationStart?: ((sender: string) => Promise<void>) | undefined;
   pendingInputs?: PendingInputs | undefined;
   modelProvider?: ModelProvider | undefined;
@@ -98,9 +100,9 @@ const INSTRUCTIONS = [
   '- “Make it a sticker” for an existing image: make_sticker, then send_sticker, without generating.',
   'Follow-ups refer to the most recent sticker or image unless the user names another one. Use list_assets when you need details.',
   'When you write an image prompt, write it in English. Describe the subject, pose, expression, and style, keep the user’s requested joke and details, and say what each reference (1, 2, …) contributes in the order given.',
-  'Only call send_sticker for a sticker asset. If send_sticker fails, fix it or explain the problem.',
+  'Only call send_sticker for a sticker asset. It sends the sticker right now, and its result is the real delivery outcome: ok means the sticker was delivered, so it is safe to say so; an error means the user has received nothing yet, so fix the problem or explain it plainly.',
   'If a tool result includes new_user_messages, the user sent those texts while you were working. Treat them as new user input: adapt your plan, change or stop what you were doing, and use the listed new_asset_ids as references when relevant.',
-  'After a sticker is sent, reply with one short, friendly message in Brazilian Portuguese. Never claim a sticker was sent unless send_sticker succeeded. Do not mention tools or internal IDs.',
+  'After a sticker is sent, reply with one short, friendly message in Brazilian Portuguese. Never claim a sticker was sent unless send_sticker returned ok. Do not mention tools or internal IDs.',
   'If a tool returns an error, explain it simply in Brazilian Portuguese and suggest a next step.',
 ].join('\n');
 
@@ -264,7 +266,7 @@ export class StickerAgent implements AgentTurnRunner {
 
       tool({
         name: 'send_sticker',
-        description: 'Send a sticker asset to the user in WhatsApp. The sticker is delivered after your reply is composed.',
+        description: 'Send a sticker asset to the user in WhatsApp right now. The tool result is the real delivery outcome: ok when delivered, or the failure reason.',
         parameters: z.object({
           asset_id: z.string().describe('A sticker asset ID (not an image).'),
         }),
@@ -274,6 +276,12 @@ export class StickerAgent implements AgentTurnRunner {
           if (!asset) return reply('send_sticker', args, { error: `Unknown asset ID ${asset_id}.` });
           if (asset.kind !== 'sticker') {
             return reply('send_sticker', args, { error: 'Only sticker assets can be sent. Run make_sticker first.' });
+          }
+
+          try {
+            await this.dependencies.whatsapp.sendSticker(sender, asset.data);
+          } catch (error) {
+            return reply('send_sticker', args, { error: `WhatsApp rejected the sticker: ${errorMessage(error)}` });
           }
 
           if (!state.stickerIds.includes(asset_id)) state.stickerIds.push(asset_id);

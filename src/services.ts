@@ -7,6 +7,7 @@ import { GENERATING_TEXT, StickerBotService } from './bot/sticker-bot.js';
 import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
 import { openDatabase, type Db } from './db/database.js';
+import { LoggedMessenger } from './deliveries/logger.js';
 import { PendingInputs } from './jobs/pending-inputs.js';
 import type { Messenger } from './messaging.js';
 import { OpenRouterImageGenerator, type ImageGenerator } from './openrouter/image-generator.js';
@@ -32,12 +33,13 @@ export interface Services {
 export function createServices(config: AppConfig, overrides: ServiceOverrides = {}): Services {
   const clock = overrides.clock ?? systemClock;
   const db = openDatabase(config.databasePath);
-  const messenger = overrides.messenger ?? new WhatsAppCloudClient({
+  const baseMessenger: Messenger = overrides.messenger ?? new WhatsAppCloudClient({
     accessToken: config.whatsapp.accessToken,
     phoneNumberId: config.whatsapp.phoneNumberId,
     graphApiVersion: config.whatsapp.graphApiVersion,
     maxInputImageBytes: config.maxInputImageBytes,
   });
+  const messenger = new LoggedMessenger(baseMessenger, db, clock);
   const imageGenerator = overrides.imageGenerator ?? new OpenRouterImageGenerator({
     apiKey: config.openRouter.apiKey,
     baseUrl: config.openRouter.baseUrl,
@@ -61,6 +63,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     assets,
     sessions: new InMemoryAgentSessionStore(config.memoryTtlMs, clock),
     budget: new DailyGenerationLimit(db, config.dailyGenerationLimit, clock),
+    whatsapp: messenger,
     notifyGenerationStart: async (sender) => {
       await messenger.sendText(sender, GENERATING_TEXT);
     },

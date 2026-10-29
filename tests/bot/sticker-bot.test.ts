@@ -82,12 +82,12 @@ describe('StickerBotService', () => {
     expect(agent.runTurn).toHaveBeenCalledWith({ sender, userText: 'faz ele rir', newAssetIds: ['image_1'] });
   });
 
-  it('sends the returned stickers before the text reply', async () => {
+  it('sends only the text reply; stickers were delivered by the agent during the turn', async () => {
     agent.runTurn.mockImplementationOnce(async () => {
       const stored = assets.add(sender, { kind: 'sticker', origin: 'generated', mimeType: 'image/webp', data: Buffer.from('webp') });
+      await (messenger.sendSticker as (to: string, data: Buffer) => Promise<unknown>)(sender, Buffer.from('webp'));
       return { text: 'Prontinho!', stickerIds: [stored.id], trace: [] };
     });
-
     await bot.handleIncoming(message({ type: 'text', text: { body: 'um cachorro' } }));
 
     expect(messenger.sendSticker).toHaveBeenCalledWith(sender, Buffer.from('webp'));
