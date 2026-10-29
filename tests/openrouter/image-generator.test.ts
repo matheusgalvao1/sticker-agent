@@ -10,9 +10,10 @@ const config = {
   quality: 'medium',
 } as const;
 
-function successfulResponse(bytes: string) {
+function successfulResponse(bytes: string, usage?: { cost: number }) {
   return new Response(JSON.stringify({
     data: [{ b64_json: Buffer.from(bytes).toString('base64'), media_type: 'image/png' }],
+    ...(usage ? { usage } : {}),
   }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
@@ -32,7 +33,8 @@ describe('OpenRouterImageGenerator', () => {
       ],
     });
 
-    expect(image.toString()).toBe('generated png');
+    expect(image.data.toString()).toBe('generated png');
+    expect(image.costUsd).toBeUndefined();
     const [url, init] = fetcher.mock.calls[0]!;
     expect(url).toBe('https://openrouter.ai/api/v1/images');
     expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-key' });
@@ -65,6 +67,25 @@ describe('OpenRouterImageGenerator', () => {
 
     const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
     expect(body.quality).toBe('low');
+  });
+
+  it('surfaces the billed amount from usage.cost when the response reports one', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(successfulResponse('generated png', { cost: 0.075 }));
+    const generator = new OpenRouterImageGenerator(config, fetcher);
+
+    const generation = await generator.generate({ prompt: 'A happy cactus.', references: [] });
+
+    expect(generation.data.toString()).toBe('generated png');
+    expect(generation.costUsd).toBe(0.075);
+  });
+
+  it('leaves the cost undefined when the response has no usage', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(successfulResponse('generated png'));
+    const generator = new OpenRouterImageGenerator(config, fetcher);
+
+    const generation = await generator.generate({ prompt: 'A happy cactus.', references: [] });
+
+    expect(generation.costUsd).toBeUndefined();
   });
 
   it('omits input_references for text-only requests', async () => {

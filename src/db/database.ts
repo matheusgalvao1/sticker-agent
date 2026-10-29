@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS generation_costs (
+  id INTEGER PRIMARY KEY,
+  sender TEXT NOT NULL,
+  model TEXT NOT NULL,
+  cost_usd REAL,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS delivery_log (
   id INTEGER PRIMARY KEY,
   sender TEXT NOT NULL,

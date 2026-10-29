@@ -8,8 +8,14 @@ export interface ImageGenerationRequest {
   references: ImageReference[];
 }
 
+export interface ImageGeneration {
+  data: Buffer;
+  /** What OpenRouter charged for this call, in USD, when the response reports usage.cost. */
+  costUsd?: number;
+}
+
 export interface ImageGenerator {
-  generate(request: ImageGenerationRequest): Promise<Buffer>;
+  generate(request: ImageGenerationRequest): Promise<ImageGeneration>;
 }
 
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -19,6 +25,9 @@ interface OpenRouterImageResponse {
     b64_json?: string;
     media_type?: string;
   }>;
+  usage?: {
+    cost?: unknown;
+  };
   error?: {
     message?: string;
   };
@@ -77,7 +86,9 @@ export class OpenRouterImageGenerator implements ImageGenerator {
 
     const bytes = Buffer.from(base64, 'base64');
     if (bytes.byteLength === 0) throw new Error('OpenRouter returned an empty image.');
-    return bytes;
+
+    const costUsd = readCostUsd(payload.usage);
+    return { data: bytes, ...(costUsd !== undefined ? { costUsd } : {}) };
   }
 }
 
@@ -88,6 +99,11 @@ function imageReference(reference: ImageReference) {
       url: `data:${reference.mimeType};base64,${reference.data.toString('base64')}`,
     },
   } as const;
+}
+
+function readCostUsd(usage: OpenRouterImageResponse['usage']): number | undefined {
+  const cost = usage?.cost;
+  return typeof cost === 'number' && Number.isFinite(cost) ? cost : undefined;
 }
 
 async function readImageResponse(response: Response): Promise<OpenRouterImageResponse> {

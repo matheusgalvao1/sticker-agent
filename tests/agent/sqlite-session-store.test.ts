@@ -102,7 +102,7 @@ describe('SQLiteAgentSessionStore', () => {
 
 function agentOver(db: Db, model: ScriptedModel) {
   return new StickerAgent({
-    config: { apiKey: 't', baseUrl: 'x', agentModel: 'm', siteUrl: 'x', appName: 't' },
+    config: { apiKey: 't', baseUrl: 'x', agentModel: 'm', imageModel: 'img', siteUrl: 'x', appName: 't' },
     imageGenerator: new StubImageGenerator() as ImageGenerator,
     assets: { list: () => [], get: () => undefined } as never,
     sessions: new SQLiteAgentSessionStore(db, 60_000, { now: () => 1 } as Clock),

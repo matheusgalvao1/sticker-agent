@@ -1,5 +1,6 @@
 import type { ModelProvider } from '@openai/agents';
 import { DailyGenerationLimit } from './agent/budget.js';
+import { SqliteGenerationCostRecorder } from './agent/generation-costs.js';
 import { StickerAgent } from './agent/sticker-agent.js';
 import { SQLiteAgentSessionStore } from './agent/sqlite-session-store.js';
 import { AccountService } from './accounts/service.js';
@@ -49,14 +50,17 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     appName: config.openRouter.appName,
     quality: config.openRouter.imageQuality,
   });
+
   const accounts = new AccountService(db, clock);
   const assets = new AssetStore(config.memoryTtlMs, clock);
   const pendingInputs = new PendingInputs();
+  const generationCosts = new SqliteGenerationCostRecorder(db, clock);
   const agent = new StickerAgent({
     config: {
       apiKey: config.openRouter.apiKey,
       baseUrl: config.openRouter.baseUrl,
       agentModel: config.openRouter.agentModel,
+      imageModel: config.openRouter.imageModel,
       siteUrl: config.openRouter.siteUrl,
       appName: config.openRouter.appName,
     },
@@ -65,6 +69,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     sessions: new SQLiteAgentSessionStore(db, config.memoryTtlMs, clock),
     budget: new DailyGenerationLimit(db, config.dailyGenerationLimit, clock),
     whatsapp: messenger,
+    costs: generationCosts,
     notifyGenerationStart: async (sender) => {
       await messenger.sendText(sender, GENERATING_TEXT);
     },

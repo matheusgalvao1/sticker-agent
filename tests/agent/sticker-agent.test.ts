@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import type { Database } from 'better-sqlite3';
 import { ScriptedModel, assistantMessage, functionCall, type ScriptedModelInput } from '@openai/agents/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { DailyGenerationLimit } from '../../src/agent/budget.js';
@@ -7,6 +8,7 @@ import { AssetStore } from '../../src/assets/store.js';
 import { openDatabase } from '../../src/db/database.js';
 import { PendingInputs } from '../../src/jobs/pending-inputs.js';
 import type { ImageGenerator } from '../../src/openrouter/image-generator.js';
+import { SqliteGenerationCostRecorder } from '../../src/agent/generation-costs.js';
 import { loadMediaSpec } from '../../src/sim/fixtures.js';
 import { FakeMessenger } from '../../src/sim/fake-messenger.js';
 import { StubImageGenerator } from '../../src/sim/stub-image-generator.js';
@@ -18,34 +20,38 @@ interface Harness {
   assets: AssetStore;
   model: ScriptedModel;
   messenger: FakeMessenger;
+  db: Database;
 }
 
 function setup(
   script: ScriptedModelInput[],
-  options: { imageGenerator?: ImageGenerator; dailyLimit?: number; notifyGenerationStart?: (sender: string) => Promise<void>; pendingInputs?: PendingInputs } = {},
+  options: { imageGenerator?: ImageGenerator; dailyLimit?: number; notifyGenerationStart?: (sender: string) => Promise<void>; pendingInputs?: PendingInputs; recordCosts?: boolean } = {},
 ): Harness {
   const clock = { now: () => 1_000 };
   const assets = new AssetStore(60_000, clock);
   const model = new ScriptedModel(script);
   const messenger = new FakeMessenger();
+  const db = openDatabase(':memory:');
   const agent = new StickerAgent({
     config: {
       apiKey: 'test',
       baseUrl: 'http://localhost',
       agentModel: 'test-model',
+      imageModel: 'test-image-model',
       siteUrl: 'http://localhost',
       appName: 'test',
     },
     imageGenerator: options.imageGenerator ?? new StubImageGenerator(),
     assets,
     sessions: new InMemoryAgentSessionStore(60_000, clock),
-    budget: new DailyGenerationLimit(openDatabase(':memory:'), options.dailyLimit ?? 20, clock),
+    budget: new DailyGenerationLimit(db, options.dailyLimit ?? 20, clock),
     whatsapp: messenger,
+    costs: options.recordCosts ? new SqliteGenerationCostRecorder(db, clock) : undefined,
     notifyGenerationStart: options.notifyGenerationStart,
     pendingInputs: options.pendingInputs,
     modelProvider: { getModel: () => model },
   });
-  return { agent, assets, model, messenger };
+  return { agent, assets, model, messenger, db };
 }
 
 async function attach(assets: AssetStore, kind: 'sticker' | 'image', spec: string): Promise<string> {
@@ -259,6 +265,42 @@ describe('StickerAgent routing', () => {
 
     expect(result.stickerIds).toEqual([]);
     expect(result.trace[1]?.result).toMatchObject({ error: expect.stringContaining('make_sticker') });
+  });
+
+  it('records the real generation cost reported by the image model', async () => {
+    const charged: ImageGenerator = {
+      async generate() {
+        const stub = new StubImageGenerator();
+        return { data: (await stub.generate({ prompt: '', references: [] })).data, costUsd: 0.123 };
+      },
+    };
+    const { agent, db } = setup([
+      [generate('A cat.', [], 'c1')],
+      [assistantMessage('Feito!')],
+    ], { imageGenerator: charged, recordCosts: true });
+
+    await agent.runTurn({ sender, userText: 'um gato', newAssetIds: [] });
+
+    const rows = db.prepare(`SELECT sender, model, cost_usd FROM generation_costs ORDER BY id`).all();
+    expect(rows).toEqual([{ sender, model: 'test-image-model', cost_usd: 0.123 }]);
+  });
+
+  it('records a null cost when the provider reports no usage.cost', async () => {
+    const uncharged: ImageGenerator = {
+      async generate() {
+        const stub = new StubImageGenerator();
+        return { data: (await stub.generate({ prompt: '', references: [] })).data };
+      },
+    };
+    const { agent, db } = setup([
+      [generate('A cat.', [], 'c1')],
+      [assistantMessage('Feito!')],
+    ], { imageGenerator: uncharged, recordCosts: true });
+
+    await agent.runTurn({ sender, userText: 'um gato', newAssetIds: [] });
+
+    const rows = db.prepare(`SELECT sender, model, cost_usd FROM generation_costs ORDER BY id`).all();
+    expect(rows).toEqual([{ sender, model: 'test-image-model', cost_usd: null }]);
   });
 
   it('falls back to a short reply when the model returns no text', async () => {

@@ -8,11 +8,13 @@ import type { ImageGenerator } from '../openrouter/image-generator.js';
 import { normalizeSticker, toModelReference, type ModelReference } from '../sticker/normalize.js';
 import type { Messenger } from '../messaging.js';
 import type { DailyGenerationLimit } from './budget.js';
+import type { GenerationCostRecorder } from './generation-costs.js';
 
 export interface AgentConfig {
   apiKey: string;
   baseUrl: string;
   agentModel: string;
+  imageModel: string;
   siteUrl: string;
   appName: string;
 }
@@ -83,6 +85,7 @@ export interface StickerAgentDependencies {
   sessions: AgentSessionStore;
   budget: DailyGenerationLimit;
   whatsapp: Messenger;
+  costs?: GenerationCostRecorder | undefined;
   notifyGenerationStart?: ((sender: string) => Promise<void>) | undefined;
   pendingInputs?: PendingInputs | undefined;
   modelProvider?: ModelProvider | undefined;
@@ -223,13 +226,14 @@ export class StickerAgent implements AgentTurnRunner {
           if (notify) await notify(sender).catch(() => undefined);
 
           try {
-            const png = await imageGenerator.generate({ prompt, references });
+            const generated = await imageGenerator.generate({ prompt, references });
             const stored = assets.add(sender, {
               kind: 'image',
               origin: 'generated',
               mimeType: 'image/png',
-              data: png,
+              data: generated.data,
             });
+            this.dependencies.costs?.record(sender, this.dependencies.config.imageModel, generated.costUsd ?? null);
             return reply('generate_image', args, { asset_id: stored.id });
           } catch (error) {
             budget.refund(sender);
