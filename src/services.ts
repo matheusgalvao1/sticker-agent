@@ -1,6 +1,7 @@
 import type { ModelProvider } from '@openai/agents';
 import { DailyGenerationLimit } from './agent/budget.js';
-import { InMemoryAgentSessionStore, StickerAgent } from './agent/sticker-agent.js';
+import { StickerAgent } from './agent/sticker-agent.js';
+import { SQLiteAgentSessionStore } from './agent/sqlite-session-store.js';
 import { AccountService } from './accounts/service.js';
 import { AssetStore } from './assets/store.js';
 import { GENERATING_TEXT, StickerBotService } from './bot/sticker-bot.js';
@@ -61,7 +62,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     },
     imageGenerator,
     assets,
-    sessions: new InMemoryAgentSessionStore(config.memoryTtlMs, clock),
+    sessions: new SQLiteAgentSessionStore(db, config.memoryTtlMs, clock),
     budget: new DailyGenerationLimit(db, config.dailyGenerationLimit, clock),
     whatsapp: messenger,
     notifyGenerationStart: async (sender) => {

@@ -24,7 +24,7 @@ Every successful turn returns a sticker and a short Portuguese reply. See `docs/
 - **Image model** (`src/openrouter/image-generator.ts`) calls OpenRouter's `POST /api/v1/images` with `input_references`. The default model is `openai/gpt-image-2.5-sunburst`.
 - **Sticker pipeline** (`src/sticker/normalize.ts`) produces 512×512 WebP files under 100 KB. It also converts stickers to PNG and photos to JPEG for the image model, and rejects animated stickers.
 - **Accounts** (`src/accounts/service.ts`) are keyed by WhatsApp number. The first message from an allowed number creates the account and sends a short welcome. There is no email or web sign-up.
-- **Database** (`src/db/database.ts`) is SQLite via `better-sqlite3`, at `DATABASE_PATH`. It stores accounts, message jobs, daily generation counts, and an audit log of every outbound message (`delivery_log` — successful sends carry Meta's message id, failures carry the reason). Conversation memory is in-process only.
+- **Database** (`src/db/database.ts`) is SQLite via `better-sqlite3`, at `DATABASE_PATH`. It stores accounts, message jobs, daily generation counts, an audit log of every outbound message (`delivery_log`), and per-sender conversation history (`agent_sessions`) so context survives restarts and idle periods (`MEMORY_TTL_MINUTES`), kept to the newest ~30 items with tool-call integrity.
 - **Services** (`src/services.ts`) wires everything together. Tests and the local harness replace WhatsApp and the image model with fakes.
 
 Only numbers in `WHATSAPP_ALLOWED_NUMBERS` reach the bot. Daily generation is capped per sender by `DAILY_GENERATION_LIMIT`. A generation that fails is refunded.

@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS generation_usage (
   PRIMARY KEY (sender, day)
 );
 
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  sender TEXT PRIMARY KEY,
+  items TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS delivery_log (
   id INTEGER PRIMARY KEY,
   sender TEXT NOT NULL,
