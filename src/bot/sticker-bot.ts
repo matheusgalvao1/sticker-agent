@@ -8,14 +8,24 @@ export interface BotAccounts {
   getOrCreateUser(whatsappId: string): { user: { status: string }; created: boolean };
 }
 
+/** Reports whether this sender's stored conversation context silently expired. */
+export interface ExpiredContextSignal {
+  hasExpiredContext(sender: string): boolean;
+}
+
 export interface StickerBotDependencies {
   assets: AssetStore;
   agent: AgentTurnRunner;
   whatsapp: Messenger;
   accounts: BotAccounts;
+  memory?: ExpiredContextSignal | undefined;
 }
 
 export const GENERATING_TEXT = 'Gerando seu sticker… 🎨';
+
+export const NEW_CONVERSATION_TEXT = 'Começamos do zero ✨ Me manda o que quiser criar.';
+
+export const MEMORY_EXPIRED_TEXT = 'Faz um tempo que a gente não fala! Comecei uma conversa novinha — manda aí o que você quiser criar 🎨';
 
 const WELCOME_TEXT = [
   '👋 Bem-vindo ao Sticker Agent!',
@@ -72,7 +82,7 @@ export class StickerBotService {
     if (command === 'new') {
       this.dependencies.assets.clear(sender);
       await this.dependencies.agent.reset(sender);
-      await whatsapp.sendText(sender, 'Conversa reiniciada. Me mande uma descrição, uma foto ou um sticker.');
+      await whatsapp.sendText(sender, NEW_CONVERSATION_TEXT);
       return skip;
     }
 
@@ -101,6 +111,12 @@ export class StickerBotService {
 
   /** One agent turn for a burst of messages, then delivery of the final text. The agent sends its own stickers. */
   async runBatch(sender: string, texts: string[], newAssetIds: string[]): Promise<void> {
+    // Before anything else, say it plainly when the previous conversation silently expired,
+    // so the fresh start reads as expected rather than as the bot forgetting.
+    if (this.dependencies.memory?.hasExpiredContext(sender)) {
+      await this.dependencies.whatsapp.sendText(sender, MEMORY_EXPIRED_TEXT);
+    }
+
     const userText = texts.filter((text) => text.length > 0).join('\n');
 
     let turn;

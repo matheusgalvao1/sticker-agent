@@ -106,6 +106,41 @@ describe('StickerBotService', () => {
     expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('animados'));
   });
 
+  it('sends the memory-expired notice before the turn when the context expired', async () => {
+    const memory = { hasExpiredContext: vi.fn(() => true) };
+    const botWithMemory = new StickerBotService({
+      assets,
+      agent: agent as unknown as AgentTurnRunner,
+      whatsapp: messenger as unknown as Messenger,
+      accounts: accounts as unknown as BotAccounts,
+      memory,
+    });
+
+    await botWithMemory.handleIncoming(message({ type: 'text', text: { body: 'um gato' } }));
+
+    expect(memory.hasExpiredContext).toHaveBeenCalledWith(sender);
+    expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('conversa novinha'));
+    const noticeOrder = messenger.sendText.mock.invocationCallOrder[0] ?? 0;
+    const turnOrder = agent.runTurn.mock.invocationCallOrder[0] ?? 0;
+    expect(noticeOrder).toBeLessThan(turnOrder);
+  });
+
+  it('stays silent about expired context when there was none', async () => {
+    const memory = { hasExpiredContext: vi.fn(() => false) };
+    const botWithMemory = new StickerBotService({
+      assets,
+      agent: agent as unknown as AgentTurnRunner,
+      whatsapp: messenger as unknown as Messenger,
+      accounts: accounts as unknown as BotAccounts,
+      memory,
+    });
+
+    await botWithMemory.handleIncoming(message({ type: 'text', text: { body: 'um gato' } }));
+
+    expect(memory.hasExpiredContext).toHaveBeenCalledWith(sender);
+    expect(messenger.sendText).not.toHaveBeenCalledWith(sender, expect.stringContaining('conversa novinha'));
+  });
+
   it('resets the conversation on /new', async () => {
     assets.add(sender, { kind: 'image', origin: 'user', mimeType: 'image/jpeg', data: Buffer.from('x') });
 
@@ -114,6 +149,7 @@ describe('StickerBotService', () => {
     expect(assets.list(sender)).toEqual([]);
     expect(agent.reset).toHaveBeenCalledWith(sender);
     expect(agent.runTurn).not.toHaveBeenCalled();
+    expect(messenger.sendText).toHaveBeenCalledWith(sender, 'Começamos do zero ✨ Me manda o que quiser criar.');
   });
 
   it('answers /help without running the agent', async () => {

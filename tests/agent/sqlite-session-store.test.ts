@@ -42,8 +42,28 @@ describe('SQLiteAgentSessionStore', () => {
     await warm.get(sender).addItems([{ type: 'message', role: 'user', content: 'old' } as AgentInputItem]);
 
     const cold = new SQLiteAgentSessionStore(db, 100, { now: () => 5_000 });
-    expiredRowsGone(db);
+    // The stale row is kept (not deleted on wake) so the bot can report that the old
+    // conversation expired; the session itself starts from zero.
     expect(await cold.get(sender).getItems()).toEqual([]);
+    expect(rowCount(db)).toBe(1);
+    expect(cold.hasExpiredContext(sender)).toBe(true);
+  });
+
+  it('reports whether a returning conversation context has expired', async () => {
+    const db = openDatabase(':memory:');
+    const store = new SQLiteAgentSessionStore(db, 100, { now: () => 10_000 });
+
+    // No row at all: a fresh user, nothing expired.
+    expect(store.hasExpiredContext(sender)).toBe(false);
+
+    await store.get(sender).addItems([{ type: 'message', role: 'user', content: 'olá' } as AgentInputItem]);
+    expect(store.hasExpiredContext(sender)).toBe(false);
+
+    const stale = new SQLiteAgentSessionStore(db, 100, { now: () => 50_000 });
+    expect(stale.hasExpiredContext(sender)).toBe(true);
+    // The turn then persists fresh content, which ends the signal.
+    await stale.get(sender).addItems([{ type: 'message', role: 'user', content: 'de novo' } as AgentInputItem]);
+    expect(stale.hasExpiredContext(sender)).toBe(false);
   });
 
   it('clears the row and ignores writes from a turn that was cleared mid-flight', async () => {
@@ -121,8 +141,4 @@ function storedItems(db: Db, who = sender): unknown[] {
 
 function rowCount(db: Db): number {
   return (db.prepare(`SELECT COUNT(*) AS n FROM agent_sessions`).get() as { n: number }).n;
-}
-
-function expiredRowsGone(db: Db): void {
-  expect(rowCount(db)).toBe(0);
 }

@@ -55,6 +55,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
   const assets = new AssetStore(config.memoryTtlMs, clock);
   const pendingInputs = new PendingInputs();
   const generationCosts = new SqliteGenerationCostRecorder(db, clock);
+  const sessionStore = new SQLiteAgentSessionStore(db, config.memoryTtlMs, clock);
   const agent = new StickerAgent({
     config: {
       apiKey: config.openRouter.apiKey,
@@ -66,7 +67,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     },
     imageGenerator,
     assets,
-    sessions: new SQLiteAgentSessionStore(db, config.memoryTtlMs, clock),
+    sessions: sessionStore,
     budget: new DailyGenerationLimit(db, config.dailyGenerationLimit, clock),
     whatsapp: messenger,
     costs: generationCosts,
@@ -76,7 +77,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     pendingInputs,
     modelProvider: overrides.modelProvider,
   });
-  const bot = new StickerBotService({ assets, agent, whatsapp: messenger, accounts });
+  const bot = new StickerBotService({ assets, agent, whatsapp: messenger, accounts, memory: sessionStore });
 
   return { bot, agent, assets, accounts, db, pendingInputs };
 }

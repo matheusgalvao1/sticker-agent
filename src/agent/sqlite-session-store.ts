@@ -62,9 +62,6 @@ export class SQLiteAgentSessionStore {
     maxItems: number = DEFAULT_MAX_SESSION_ITEMS,
   ) {
     this.maxItems = maxItems;
-    // Idle sessions expire exactly the way the previous in-process ones did; the row is
-    // simply dropped once its conversation has been silent for longer than the TTL.
-    this.expirePreviousSessions();
   }
 
   get(sender: string): MemorySession {
@@ -92,8 +89,19 @@ export class SQLiteAgentSessionStore {
     } catch {}
   }
 
-  private persist(sender: string, generation: number, items: AgentInputItem[]): void {
-    if ((this.generations.get(sender) ?? 0) !== generation) return;
+  /**
+   * True when this sender's stored conversation is present but older than the TTL — the
+   * turn will start from zero, and the bot says so. The stale row is deliberately kept:
+   * the incoming turn overwrites it, which also clears the signal.
+   */
+  hasExpiredContext(sender: string): boolean {
+    const row = this.db.prepare(`SELECT updated_at FROM agent_sessions WHERE sender = ?`)
+      .get(sender) as { updated_at: number } | undefined;
+    if (!row) return false;
+    return this.clock.now() - row.updated_at > this.ttlMs;
+  }
+
+  private persist(sender: string, generation: number, items: AgentInputItem[]): void {    if ((this.generations.get(sender) ?? 0) !== generation) return;
 
     // Persistence must never break a running turn, so database errors are swallowed —
     // the worst case is losing the newest stretch of history, like the in-memory TTL did.
@@ -104,12 +112,6 @@ export class SQLiteAgentSessionStore {
         VALUES (?, ?, ?)
         ON CONFLICT(sender) DO UPDATE SET items = excluded.items, updated_at = excluded.updated_at
       `).run(sender, JSON.stringify(trimmed), this.clock.now());
-    } catch {}
-  }
-
-  private expirePreviousSessions(): void {
-    try {
-      this.db.prepare(`DELETE FROM agent_sessions WHERE updated_at < ?`).run(this.clock.now() - this.ttlMs);
     } catch {}
   }
 }
