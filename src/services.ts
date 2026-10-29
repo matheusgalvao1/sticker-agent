@@ -47,8 +47,8 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     model: config.openRouter.imageModel,
     siteUrl: config.openRouter.siteUrl,
     appName: config.openRouter.appName,
+    quality: config.openRouter.imageQuality,
   });
-
   const accounts = new AccountService(db, clock);
   const assets = new AssetStore(config.memoryTtlMs, clock);
   const pendingInputs = new PendingInputs();

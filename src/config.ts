@@ -9,6 +9,7 @@ const environmentSchema = z.object({
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   OPENROUTER_AGENT_MODEL: z.string().min(1).default('openai/gpt-6-luna'),
   OPENROUTER_IMAGE_MODEL: z.string().min(1).default('openai/gpt-image-2.5-sunburst'),
+  OPENROUTER_IMAGE_QUALITY: z.enum(['auto', 'low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   OPENROUTER_SITE_URL: z.string().url().default('http://localhost:3000'),
   OPENROUTER_APP_NAME: z.string().default('WhatsApp Sticker Agent'),
 
@@ -36,6 +37,7 @@ export interface AppConfig {
     baseUrl: string;
     agentModel: string;
     imageModel: string;
+    imageQuality: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     siteUrl: string;
     appName: string;
   };
@@ -89,6 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       baseUrl: values.OPENROUTER_BASE_URL.replace(/\/$/, ''),
       agentModel: values.OPENROUTER_AGENT_MODEL,
       imageModel: values.OPENROUTER_IMAGE_MODEL,
+      imageQuality: values.OPENROUTER_IMAGE_QUALITY,
       siteUrl: values.OPENROUTER_SITE_URL,
       appName: values.OPENROUTER_APP_NAME,
     },

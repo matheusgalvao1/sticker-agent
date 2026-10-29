@@ -12,6 +12,8 @@ export interface ImageGenerator {
   generate(request: ImageGenerationRequest): Promise<Buffer>;
 }
 
+export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 interface OpenRouterImageResponse {
   data?: Array<{
     b64_json?: string;
@@ -28,6 +30,7 @@ export interface OpenRouterImageGeneratorConfig {
   model: string;
   siteUrl: string;
   appName: string;
+  quality: ImageQuality;
 }
 
 const STICKER_RULES = [
@@ -42,7 +45,7 @@ export class OpenRouterImageGenerator implements ImageGenerator {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  async generate(request: ImageGenerationRequest): Promise<Buffer> {
+  async generate(request: ImageGenerationRequest): Promise<ImageGeneration> {
     const response = await this.fetcher(`${this.config.baseUrl}/images`, {
       method: 'POST',
       headers: {
@@ -58,7 +61,7 @@ export class OpenRouterImageGenerator implements ImageGenerator {
           ? { input_references: request.references.map(imageReference) }
           : {}),
         size: '1024x1024',
-        quality: 'high',
+        quality: this.config.quality,
         background: 'transparent',
         output_format: 'png',
         n: 1,

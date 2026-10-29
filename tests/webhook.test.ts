@@ -17,6 +17,7 @@ const config: AppConfig = {
     baseUrl: 'https://openrouter.ai/api/v1',
     agentModel: 'openai/gpt-6-luna',
     imageModel: 'openai/gpt-image-2.5-sunburst',
+    imageQuality: 'medium',
     siteUrl: 'https://sticker.example',
     appName: 'Sticker bot test',
   },

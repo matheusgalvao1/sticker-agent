@@ -21,6 +21,7 @@ const config: AppConfig = {
     baseUrl: 'https://openrouter.test/api/v1',
     agentModel: 'test-model',
     imageModel: 'test-image-model',
+    imageQuality: 'medium',
     siteUrl: 'https://sticker.example',
     appName: 'Sticker test',
   },

@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePhoneNumber } from '../src/config.js';
+import { loadConfig, normalizePhoneNumber } from '../src/config.js';
+
+const minimalEnvironment = {
+  NODE_ENV: 'development',
+  OPENROUTER_API_KEY: 'key',
+  WHATSAPP_ACCESS_TOKEN: 'token',
+  WHATSAPP_PHONE_NUMBER_ID: '123',
+  WHATSAPP_VERIFY_TOKEN: 'verify',
+};
+
+describe('loadConfig image quality', () => {
+  it('defaults to medium', () => {
+    const config = loadConfig({ ...minimalEnvironment });
+    expect(config.openRouter.imageQuality).toBe('medium');
+  });
+
+  it('accepts every supported quality and passes it through', () => {
+    for (const quality of ['auto', 'low', 'medium', 'high', 'xhigh', 'max']) {
+      const config = loadConfig({ ...minimalEnvironment, OPENROUTER_IMAGE_QUALITY: quality });
+      expect(config.openRouter.imageQuality).toBe(quality);
+    }
+  });
+
+  it('rejects an unsupported quality', () => {
+    expect(() => loadConfig({ ...minimalEnvironment, OPENROUTER_IMAGE_QUALITY: 'ultra' }))
+      .toThrow(/Invalid environment configuration/);
+  });
+});
 
 describe('normalizePhoneNumber', () => {
   it('keeps digits only', () => {
