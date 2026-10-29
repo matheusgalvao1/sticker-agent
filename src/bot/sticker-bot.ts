@@ -15,15 +15,17 @@ export interface StickerBotDependencies {
   accounts: BotAccounts;
 }
 
+export const GENERATING_TEXT = 'Gerando seu sticker… 🎨';
+
 const WELCOME_TEXT = [
   '👋 Bem-vindo ao Sticker Agent!',
-  'Me mande uma descrição, uma foto ou uma figurinha, com ou sem instruções. Eu crio a figurinha e envio para você.',
+  'Me mande uma descrição, uma foto ou um sticker, com ou sem instruções. Eu crio o sticker e envio para você.',
   'Se faltar alguma informação, eu pergunto. Use /new para começar uma conversa nova.',
 ].join('\n');
 
 const HELP_TEXT = [
-  'Eu crio e transformo figurinhas para o WhatsApp.',
-  'Me mande uma descrição, uma foto ou uma figurinha, com ou sem instruções. Se faltar alguma informação, eu pergunto.',
+  'Eu crio e transformo stickers para o WhatsApp.',
+  'Me mande uma descrição, uma foto ou um sticker, com ou sem instruções. Se faltar alguma informação, eu pergunto.',
   'Use /new para começar uma conversa nova.',
 ].join('\n');
 
@@ -52,7 +54,7 @@ export class StickerBotService {
     if (command === 'new') {
       this.dependencies.assets.clear(sender);
       await this.dependencies.agent.reset(sender);
-      await whatsapp.sendText(sender, 'Conversa reiniciada. Me mande uma descrição, uma foto ou uma figurinha.');
+      await whatsapp.sendText(sender, 'Conversa reiniciada. Me mande uma descrição, uma foto ou um sticker.');
       return;
     }
 
@@ -71,7 +73,7 @@ export class StickerBotService {
     } else {
       await whatsapp.sendText(
         sender,
-        'Ainda não consigo usar esse tipo de mensagem. Envie texto, uma foto ou uma figurinha.',
+        'Ainda não consigo usar esse tipo de mensagem. Envie texto, uma foto ou um sticker.',
       );
       return;
     }
@@ -90,7 +92,7 @@ export class StickerBotService {
       try {
         await whatsapp.sendSticker(sender, asset.data);
       } catch {
-        await whatsapp.sendText(sender, 'Criei a figurinha, mas não consegui enviá-la. Pode pedir de novo?');
+        await whatsapp.sendText(sender, 'Criei o sticker, mas não consegui enviá-lo. Pode pedir de novo?');
       }
     }
 
@@ -103,7 +105,7 @@ export class StickerBotService {
       if (kind === 'sticker' && await isAnimatedSticker(media.data)) {
         await this.dependencies.whatsapp.sendText(
           sender,
-          'Figurinhas animadas ainda não são suportadas. Envie uma estática ou uma foto.',
+          'Stickers animados ainda não são suportados. Envie um estático ou uma foto.',
         );
         return null;
       }

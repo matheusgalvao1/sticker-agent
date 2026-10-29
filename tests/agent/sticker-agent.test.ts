@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { ScriptedModel, assistantMessage, functionCall, type ScriptedModelInput } from '@openai/agents/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DailyGenerationLimit } from '../../src/agent/budget.js';
 import { InMemoryAgentSessionStore, StickerAgent } from '../../src/agent/sticker-agent.js';
 import { AssetStore } from '../../src/assets/store.js';
@@ -19,7 +19,7 @@ interface Harness {
 
 function setup(
   script: ScriptedModelInput[],
-  options: { imageGenerator?: ImageGenerator; dailyLimit?: number } = {},
+  options: { imageGenerator?: ImageGenerator; dailyLimit?: number; notifyGenerationStart?: (sender: string) => Promise<void> } = {},
 ): Harness {
   const clock = { now: () => 1_000 };
   const assets = new AssetStore(60_000, clock);
@@ -36,6 +36,7 @@ function setup(
     assets,
     sessions: new InMemoryAgentSessionStore(60_000, clock),
     budget: new DailyGenerationLimit(openDatabase(':memory:'), options.dailyLimit ?? 20, clock),
+    notifyGenerationStart: options.notifyGenerationStart,
     modelProvider: { getModel: () => model },
   });
   return { agent, assets, model };
@@ -59,6 +60,17 @@ function sendSticker(assetId: string, callId: string) {
 }
 
 describe('StickerAgent routing', () => {
+  it('notifies before generating an image', async () => {
+    const notify = vi.fn(async () => undefined);
+    const { agent } = setup([
+      [generate('a cat astronaut', [], 'call-1')],
+      [assistantMessage('Feito!')],
+    ], { notifyGenerationStart: notify });
+
+    await agent.runTurn({ sender, userText: 'um gato astronauta', newAssetIds: [] });
+
+    expect(notify).toHaveBeenCalledWith(sender);
+  });
   it('turns a text-only description into a sticker', async () => {
     const { agent, model } = setup([
       [generate('A fat orange cat wearing sunglasses.', [], 'c1')],

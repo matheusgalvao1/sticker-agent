@@ -3,7 +3,7 @@ import { DailyGenerationLimit } from './agent/budget.js';
 import { InMemoryAgentSessionStore, StickerAgent } from './agent/sticker-agent.js';
 import { AccountService } from './accounts/service.js';
 import { AssetStore } from './assets/store.js';
-import { StickerBotService } from './bot/sticker-bot.js';
+import { GENERATING_TEXT, StickerBotService } from './bot/sticker-bot.js';
 import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
 import { openDatabase, type Db } from './db/database.js';
@@ -58,6 +58,9 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     assets,
     sessions: new InMemoryAgentSessionStore(config.memoryTtlMs, clock),
     budget: new DailyGenerationLimit(db, config.dailyGenerationLimit, clock),
+    notifyGenerationStart: async (sender) => {
+      await messenger.sendText(sender, GENERATING_TEXT);
+    },
     modelProvider: overrides.modelProvider,
   });
   const bot = new StickerBotService({ assets, agent, whatsapp: messenger, accounts });

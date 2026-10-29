@@ -84,17 +84,18 @@ describe('end-to-end flow through the webhook', () => {
     await app.drainMessageQueue();
 
     const replies = messenger.outbound.slice(start);
-    expect(replies.map((message) => message.type)).toEqual(['sticker', 'text']);
+    expect(replies.map((message) => message.type)).toEqual(['text', 'sticker', 'text']);
+    expect(replies[0]).toMatchObject({ body: expect.stringContaining('Gerando') });
     expect(imageGenerator.calls[0]?.references[0]?.mimeType).toBe('image/png');
 
-    const sticker = replies[0];
+    const sticker = replies[1];
     if (sticker?.type !== 'sticker') throw new Error('expected a sticker');
     const metadata = await sharp(sticker.data).metadata();
     expect(metadata.format).toBe('webp');
     expect(metadata.width).toBe(512);
     expect(metadata.height).toBe(512);
 
-    expect(replies[1]).toMatchObject({ body: 'Aqui está, com chapéu!' });
+    expect(replies[2]).toMatchObject({ body: 'Aqui está, com chapéu!' });
     model.assertComplete();
   });
 

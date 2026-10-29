@@ -80,6 +80,7 @@ export interface StickerAgentDependencies {
   assets: AssetStore;
   sessions: AgentSessionStore;
   budget: DailyGenerationLimit;
+  notifyGenerationStart?: ((sender: string) => Promise<void>) | undefined;
   modelProvider?: ModelProvider | undefined;
 }
 
@@ -205,6 +206,9 @@ export class StickerAgent implements AgentTurnRunner {
               error: 'The daily generation limit was reached. Tell the user to try again tomorrow.',
             });
           }
+
+          const notify = this.dependencies.notifyGenerationStart;
+          if (notify) await notify(sender).catch(() => undefined);
 
           try {
             const png = await imageGenerator.generate({ prompt, references });

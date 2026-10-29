@@ -103,7 +103,7 @@ describe('StickerBotService', () => {
     await bot.handleIncoming(message({ type: 'sticker', sticker: { id: 'media-3' } }));
 
     expect(agent.runTurn).not.toHaveBeenCalled();
-    expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('animadas'));
+    expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('animados'));
   });
 
   it('resets the conversation on /new', async () => {
@@ -120,7 +120,7 @@ describe('StickerBotService', () => {
     await bot.handleIncoming(message({ type: 'text', text: { body: '/help' } }));
 
     expect(agent.runTurn).not.toHaveBeenCalled();
-    expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('figurinhas'));
+    expect(messenger.sendText).toHaveBeenCalledWith(sender, expect.stringContaining('stickers'));
   });
 
   it('does not let a suspended account use the bot', async () => {
