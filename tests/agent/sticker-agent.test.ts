@@ -5,6 +5,7 @@ import { DailyGenerationLimit } from '../../src/agent/budget.js';
 import { InMemoryAgentSessionStore, StickerAgent } from '../../src/agent/sticker-agent.js';
 import { AssetStore } from '../../src/assets/store.js';
 import { openDatabase } from '../../src/db/database.js';
+import { PendingInputs } from '../../src/jobs/pending-inputs.js';
 import type { ImageGenerator } from '../../src/openrouter/image-generator.js';
 import { loadMediaSpec } from '../../src/sim/fixtures.js';
 import { StubImageGenerator } from '../../src/sim/stub-image-generator.js';
@@ -19,7 +20,7 @@ interface Harness {
 
 function setup(
   script: ScriptedModelInput[],
-  options: { imageGenerator?: ImageGenerator; dailyLimit?: number; notifyGenerationStart?: (sender: string) => Promise<void> } = {},
+  options: { imageGenerator?: ImageGenerator; dailyLimit?: number; notifyGenerationStart?: (sender: string) => Promise<void>; pendingInputs?: PendingInputs } = {},
 ): Harness {
   const clock = { now: () => 1_000 };
   const assets = new AssetStore(60_000, clock);
@@ -37,6 +38,7 @@ function setup(
     sessions: new InMemoryAgentSessionStore(60_000, clock),
     budget: new DailyGenerationLimit(openDatabase(':memory:'), options.dailyLimit ?? 20, clock),
     notifyGenerationStart: options.notifyGenerationStart,
+    pendingInputs: options.pendingInputs,
     modelProvider: { getModel: () => model },
   });
   return { agent, assets, model };
@@ -70,6 +72,20 @@ describe('StickerAgent routing', () => {
     await agent.runTurn({ sender, userText: 'um gato astronauta', newAssetIds: [] });
 
     expect(notify).toHaveBeenCalledWith(sender);
+  });
+
+  it('attaches newer user messages at the next tool boundary', async () => {
+    const pendingInputs = new PendingInputs();
+    pendingInputs.add(sender, { jobId: 9, text: 'muda pra azul', assetIds: [] });
+    const { agent } = setup([
+      [generate('cat', [], 'call-1')],
+      [assistantMessage('ok, azul!')],
+    ], { pendingInputs });
+
+    const result = await agent.runTurn({ sender, userText: 'um gato', newAssetIds: [] });
+
+    const generateCall = result.trace.find((entry) => entry.tool === 'generate_image');
+    expect(generateCall?.result).toMatchObject({ new_user_messages: { texts: ['muda pra azul'] } });
   });
   it('turns a text-only description into a sticker', async () => {
     const { agent, model } = setup([

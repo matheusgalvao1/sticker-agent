@@ -7,6 +7,7 @@ import { GENERATING_TEXT, StickerBotService } from './bot/sticker-bot.js';
 import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
 import { openDatabase, type Db } from './db/database.js';
+import { PendingInputs } from './jobs/pending-inputs.js';
 import type { Messenger } from './messaging.js';
 import { OpenRouterImageGenerator, type ImageGenerator } from './openrouter/image-generator.js';
 import { WhatsAppCloudClient } from './whatsapp/client.js';
@@ -24,6 +25,7 @@ export interface Services {
   assets: AssetStore;
   accounts: AccountService;
   db: Db;
+  pendingInputs: PendingInputs;
 }
 
 /** Wires the application together. Tests and the local harness pass fakes as overrides. */
@@ -46,6 +48,7 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
 
   const accounts = new AccountService(db, clock);
   const assets = new AssetStore(config.memoryTtlMs, clock);
+  const pendingInputs = new PendingInputs();
   const agent = new StickerAgent({
     config: {
       apiKey: config.openRouter.apiKey,
@@ -61,9 +64,10 @@ export function createServices(config: AppConfig, overrides: ServiceOverrides = 
     notifyGenerationStart: async (sender) => {
       await messenger.sendText(sender, GENERATING_TEXT);
     },
+    pendingInputs,
     modelProvider: overrides.modelProvider,
   });
   const bot = new StickerBotService({ assets, agent, whatsapp: messenger, accounts });
 
-  return { bot, agent, assets, accounts, db };
+  return { bot, agent, assets, accounts, db, pendingInputs };
 }

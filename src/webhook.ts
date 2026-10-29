@@ -4,7 +4,8 @@ import type { AppConfig } from './config.js';
 import { normalizePhoneNumber } from './config.js';
 import type { StickerBotService } from './bot/sticker-bot.js';
 import type { Db } from './db/database.js';
-import { MessageJobs } from './jobs/message-jobs.js';
+import { PendingInputs } from './jobs/pending-inputs.js';
+import { MessageScheduler } from './jobs/message-scheduler.js';
 import { extractIncomingMessages } from './whatsapp/types.js';
 
 declare module 'fastify' {
@@ -21,6 +22,7 @@ export interface WebhookAppDependencies {
   config: AppConfig;
   bot: StickerBotService;
   db: Db;
+  pendingInputs?: PendingInputs;
 }
 
 export function buildApp(dependencies: WebhookAppDependencies): FastifyInstance {
@@ -43,10 +45,18 @@ export function buildApp(dependencies: WebhookAppDependencies): FastifyInstance 
       }
     },
   );
-  const jobs = new MessageJobs(dependencies.db, dependencies.bot, app.log);
+  const jobs = new MessageScheduler(
+    dependencies.db,
+    dependencies.bot,
+    app.log,
+    dependencies.pendingInputs ?? new PendingInputs(),
+    dependencies.config.batchWindowMs,
+  );
 
   app.decorate('drainMessageQueue', () => jobs.drain());
-  app.addHook('onReady', async () => jobs.resume());
+  app.addHook('onReady', async () => {
+    await jobs.resume();
+  });
 
   app.get('/health', async () => ({ ok: true }));
 

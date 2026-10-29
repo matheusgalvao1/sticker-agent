@@ -13,7 +13,7 @@ Every successful turn returns a sticker and a short Portuguese reply. See `docs/
 
 ## Architecture
 
-- **Fastify** receives Meta's webhook and verifies `X-Hub-Signature-256`. Each new message is saved as a job in SQLite before the webhook is acknowledged. Jobs run in a per-sender queue, and unfinished jobs run again when the app starts.
+- **Fastify** receives Meta's webhook and verifies `X-Hub-Signature-256`. Each new message is saved as a job in SQLite before the webhook is acknowledged. Jobs run in a per-sender queue: bursts of messages are merged into one turn after a short grace window (`BATCH_WINDOW_SECONDS`, 5 seconds by default), and messages sent while a turn runs are attached to the agent's next tool result, so it adapts instead of restarting.
 - **Bot** (`src/bot/sticker-bot.ts`) downloads incoming media into the conversation's asset store, runs one agent turn, then sends any stickers and the reply text.
 - **Asset store** (`src/assets/store.ts`) keeps each sender's stickers and images with short IDs (`sticker_1`, `image_2`). Memory expires after `MEMORY_TTL_MINUTES` of inactivity.
 - **Agent** (`src/agent/sticker-agent.ts`) uses the OpenAI Agents SDK through OpenRouter's Chat Completions endpoint. It has four tools:

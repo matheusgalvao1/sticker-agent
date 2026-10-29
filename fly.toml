@@ -13,6 +13,7 @@ primary_region = 'gru'
   OPENROUTER_APP_NAME = 'Sticker Agent'
   MEMORY_TTL_MINUTES = '15'
   DAILY_GENERATION_LIMIT = '20'
+  BATCH_WINDOW_SECONDS = '5'
 
 [http_service]
   internal_port = 8080

@@ -29,18 +29,36 @@ const HELP_TEXT = [
   'Use /new para começar uma conversa nova.',
 ].join('\n');
 
+export interface IngestedMessage {
+  text: string;
+  newAssetIds: string[];
+  skip: boolean;
+}
+
 export class StickerBotService {
   constructor(private readonly dependencies: StickerBotDependencies) {}
 
+  /** Compatibility entry point: ingest one message and run its turn immediately. */
   async handleIncoming(message: IncomingWhatsAppMessage): Promise<void> {
+    const ingested = await this.ingestMessage(message);
+    if (ingested.skip) return;
+    await this.runBatch(message.from, [ingested.text], ingested.newAssetIds);
+  }
+
+  /**
+   * Per-message work done on arrival: account, welcome, commands, and media download.
+   * skip means the message was fully handled here and no agent turn is needed.
+   */
+  async ingestMessage(message: IncomingWhatsAppMessage): Promise<IngestedMessage> {
     const sender = message.from;
     const text = messageText(message);
     const command = message.type === 'text' ? parseCommand(text) : null;
     const { whatsapp, accounts } = this.dependencies;
+    const skip: IngestedMessage = { text: '', newAssetIds: [], skip: true };
 
     if (command === 'help') {
       await whatsapp.sendText(sender, HELP_TEXT);
-      return;
+      return skip;
     }
 
     const { user, created } = accounts.getOrCreateUser(sender);
@@ -48,41 +66,48 @@ export class StickerBotService {
 
     if (user.status !== 'active') {
       await whatsapp.sendText(sender, 'Sua conta está suspensa. Fale com o administrador.');
-      return;
+      return skip;
     }
 
     if (command === 'new') {
       this.dependencies.assets.clear(sender);
       await this.dependencies.agent.reset(sender);
       await whatsapp.sendText(sender, 'Conversa reiniciada. Me mande uma descrição, uma foto ou um sticker.');
-      return;
+      return skip;
     }
 
     const newAssetIds: string[] = [];
 
     if (message.type === 'sticker' && message.sticker?.id) {
       const id = await this.ingest(sender, message.sticker.id, 'sticker');
-      if (!id) return;
+      if (!id) return skip;
       newAssetIds.push(id);
     } else if (message.type === 'image' && message.image?.id) {
       const id = await this.ingest(sender, message.image.id, 'image');
-      if (!id) return;
+      if (!id) return skip;
       newAssetIds.push(id);
     } else if (message.type === 'text') {
-      if (!text) return;
+      if (!text) return skip;
     } else {
       await whatsapp.sendText(
         sender,
         'Ainda não consigo usar esse tipo de mensagem. Envie texto, uma foto ou um sticker.',
       );
-      return;
+      return skip;
     }
+
+    return { text, newAssetIds, skip: false };
+  }
+
+  /** One agent turn for a burst of messages, then delivery of the stickers and the final text. */
+  async runBatch(sender: string, texts: string[], newAssetIds: string[]): Promise<void> {
+    const userText = texts.filter((text) => text.length > 0).join('\n');
 
     let turn;
     try {
-      turn = await this.dependencies.agent.runTurn({ sender, userText: text, newAssetIds });
+      turn = await this.dependencies.agent.runTurn({ sender, userText, newAssetIds });
     } catch {
-      await whatsapp.sendText(sender, 'Tive um problema ao processar sua mensagem. Pode tentar de novo?');
+      await this.dependencies.whatsapp.sendText(sender, 'Tive um problema ao processar sua mensagem. Pode tentar de novo?');
       return;
     }
 
@@ -90,13 +115,13 @@ export class StickerBotService {
       const asset = this.dependencies.assets.get(sender, id);
       if (!asset) continue;
       try {
-        await whatsapp.sendSticker(sender, asset.data);
+        await this.dependencies.whatsapp.sendSticker(sender, asset.data);
       } catch {
-        await whatsapp.sendText(sender, 'Criei o sticker, mas não consegui enviá-lo. Pode pedir de novo?');
+        await this.dependencies.whatsapp.sendText(sender, 'Criei o sticker, mas não consegui enviá-lo. Pode pedir de novo?');
       }
     }
 
-    if (turn.text) await whatsapp.sendText(sender, turn.text);
+    if (turn.text) await this.dependencies.whatsapp.sendText(sender, turn.text);
   }
 
   private async ingest(sender: string, mediaId: string, kind: AssetKind): Promise<string | null> {

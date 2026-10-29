@@ -30,9 +30,28 @@ const config: AppConfig = {
   },
   memoryTtlMs: 60_000,
   dailyGenerationLimit: 20,
+  batchWindowMs: 0,
   maxInputImageBytes: 10_000_000,
   databasePath: ':memory:',
 };
+
+function botStub() {
+  const ingestMessage = vi.fn(async (message: IncomingMessage) => ({
+    text: message.text?.body ?? '',
+    newAssetIds: [],
+    skip: false,
+  }));
+  const runBatch = vi.fn(async () => undefined);
+  return {
+    ingestMessage,
+    runBatch,
+    bot: { ingestMessage, runBatch } as unknown as StickerBotService,
+  };
+}
+
+interface IncomingMessage {
+  text?: { body?: string };
+}
 
 describe('WhatsApp webhook', () => {
   let app: ReturnType<typeof buildApp> | undefined;
@@ -45,7 +64,7 @@ describe('WhatsApp webhook', () => {
   it('answers Meta’s webhook verification challenge', async () => {
     app = buildApp({
       config,
-      bot: { handleIncoming: vi.fn() } as unknown as StickerBotService,
+      bot: { ingestMessage: vi.fn(), runBatch: vi.fn() } as unknown as StickerBotService,
       db: openDatabase(':memory:'),
     });
 
@@ -59,12 +78,8 @@ describe('WhatsApp webhook', () => {
   });
 
   it('validates Meta’s HMAC signature and queues allowed messages once', async () => {
-    const handleIncoming = vi.fn(async () => undefined);
-    app = buildApp({
-      config,
-      bot: { handleIncoming } as unknown as StickerBotService,
-      db: openDatabase(':memory:'),
-    });
+    const { bot, runBatch, ingestMessage } = botStub();
+    app = buildApp({ config, bot, db: openDatabase(':memory:') });
     const payload = webhookPayload('wamid-test-1');
     const signature = createHmac('sha256', appSecret).update(payload).digest('hex');
 
@@ -79,7 +94,7 @@ describe('WhatsApp webhook', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    await vi.waitFor(() => expect(handleIncoming).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(runBatch).toHaveBeenCalledOnce());
 
     const duplicate = await app.inject({
       method: 'POST',
@@ -92,16 +107,13 @@ describe('WhatsApp webhook', () => {
     });
 
     expect(duplicate.statusCode).toBe(200);
-    expect(handleIncoming).toHaveBeenCalledOnce();
+    expect(runBatch).toHaveBeenCalledTimes(1);
+    expect(ingestMessage).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an invalid signature and ignores senders outside the allowlist', async () => {
-    const handleIncoming = vi.fn(async () => undefined);
-    app = buildApp({
-      config,
-      bot: { handleIncoming } as unknown as StickerBotService,
-      db: openDatabase(':memory:'),
-    });
+    const { bot, runBatch } = botStub();
+    app = buildApp({ config, bot, db: openDatabase(':memory:') });
     const payload = webhookPayload('wamid-untrusted', '15550000000');
 
     const badSignature = await app.inject({
@@ -124,34 +136,36 @@ describe('WhatsApp webhook', () => {
     });
 
     expect(unauthorized.statusCode).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(handleIncoming).not.toHaveBeenCalled();
+    await app.drainMessageQueue();
+    expect(runBatch).not.toHaveBeenCalled();
   });
 
   it('keeps unfinished messages and runs them when the app starts again', async () => {
     const db = openDatabase(':memory:');
     const payload = webhookPayload('wamid-restart');
-    const hung = vi.fn(() => new Promise<void>(() => undefined));
+    const runBatch = vi.fn(() => new Promise<void>(() => undefined));
+    const ingestMessage = vi.fn(async () => ({ text: 'hello', newAssetIds: [], skip: false }));
     const interrupted = buildApp({
       config,
-      bot: { handleIncoming: hung } as unknown as StickerBotService,
+      bot: { ingestMessage, runBatch } as unknown as StickerBotService,
       db,
     });
 
     const response = await postSigned(interrupted, payload);
     expect(response.statusCode).toBe(200);
-    await vi.waitFor(() => expect(hung).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(runBatch).toHaveBeenCalledOnce());
     await interrupted.close();
 
-    const handleIncoming = vi.fn(async () => undefined);
-    app = buildApp({ config, bot: { handleIncoming } as unknown as StickerBotService, db });
+    const resumed = botStub();
+    app = buildApp({ config, bot: resumed.bot, db });
     await app.ready();
-    await vi.waitFor(() => expect(handleIncoming).toHaveBeenCalledOnce());
-    expect(handleIncoming).toHaveBeenCalledWith(expect.objectContaining({ id: 'wamid-restart', from: allowedSender }));
+    await app.drainMessageQueue();
+    expect(resumed.runBatch).toHaveBeenCalledTimes(1);
+    expect(resumed.runBatch).toHaveBeenCalledWith(allowedSender, ['hello'], []);
 
     await postSigned(app, payload);
     await app.drainMessageQueue();
-    expect(handleIncoming).toHaveBeenCalledOnce();
+    expect(resumed.runBatch).toHaveBeenCalledTimes(1);
   });
 });
 

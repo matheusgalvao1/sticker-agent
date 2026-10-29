@@ -4,8 +4,8 @@ import { createServices } from './services.js';
 import { buildApp } from './webhook.js';
 
 const config = loadConfig();
-const { bot, db } = createServices(config);
-const app = buildApp({ config, bot, db });
+const { bot, db, pendingInputs } = createServices(config);
+const app = buildApp({ config, bot, db, pendingInputs });
 
 try {
   await app.listen({ host: config.host, port: config.port });

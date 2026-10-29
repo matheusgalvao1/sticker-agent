@@ -34,6 +34,7 @@ const config = loadConfig({
   HOST: '127.0.0.1',
   PORT: SIM_PORT,
   DATABASE_PATH: databasePath,
+  BATCH_WINDOW_SECONDS: '0',
   WHATSAPP_ACCESS_TOKEN: 'sim',
   WHATSAPP_PHONE_NUMBER_ID: 'sim',
   WHATSAPP_VERIFY_TOKEN: 'sim',
@@ -60,7 +61,7 @@ const services = createServices(config, {
   messenger,
   imageGenerator: useRealImages ? undefined : new StubImageGenerator(),
 });
-const app = buildApp({ config, bot: services.bot, db: services.db });
+const app = buildApp({ config, bot: services.bot, db: services.db, pendingInputs: services.pendingInputs });
 const url = await app.listen({ host: config.host, port: config.port });
 
 console.log(`Sticker Agent local harness at ${url} (images: ${useRealImages ? 'OpenRouter' : 'stub'}). Sender ${SIM_SENDER}.`);

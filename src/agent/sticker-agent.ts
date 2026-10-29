@@ -3,6 +3,7 @@ import { Agent, MemorySession, OpenAIProvider, Runner, setTracingDisabled, tool,
 import { z } from 'zod';
 import type { AssetStore, StoredAsset } from '../assets/store.js';
 import type { Clock } from '../clock.js';
+import type { PendingInputs } from '../jobs/pending-inputs.js';
 import type { ImageGenerator } from '../openrouter/image-generator.js';
 import { normalizeSticker, toModelReference, type ModelReference } from '../sticker/normalize.js';
 import type { DailyGenerationLimit } from './budget.js';
@@ -81,6 +82,7 @@ export interface StickerAgentDependencies {
   sessions: AgentSessionStore;
   budget: DailyGenerationLimit;
   notifyGenerationStart?: ((sender: string) => Promise<void>) | undefined;
+  pendingInputs?: PendingInputs | undefined;
   modelProvider?: ModelProvider | undefined;
 }
 
@@ -97,6 +99,7 @@ const INSTRUCTIONS = [
   'Follow-ups refer to the most recent sticker or image unless the user names another one. Use list_assets when you need details.',
   'When you write an image prompt, write it in English. Describe the subject, pose, expression, and style, keep the user’s requested joke and details, and say what each reference (1, 2, …) contributes in the order given.',
   'Only call send_sticker for a sticker asset. If send_sticker fails, fix it or explain the problem.',
+  'If a tool result includes new_user_messages, the user sent those texts while you were working. Treat them as new user input: adapt your plan, change or stop what you were doing, and use the listed new_asset_ids as references when relevant.',
   'After a sticker is sent, reply with one short, friendly message in Brazilian Portuguese. Never claim a sticker was sent unless send_sticker succeeded. Do not mention tools or internal IDs.',
   'If a tool returns an error, explain it simply in Brazilian Portuguese and suggest a next step.',
 ].join('\n');
@@ -157,6 +160,13 @@ export class StickerAgent implements AgentTurnRunner {
     const { sender } = state;
 
     const reply = (name: string, args: unknown, result: Record<string, unknown>): string => {
+      const fresh = this.dependencies.pendingInputs?.take(sender) ?? [];
+      if (fresh.length > 0) {
+        result.new_user_messages = {
+          texts: fresh.map((entry) => entry.text).filter((text) => text.length > 0),
+          new_asset_ids: fresh.flatMap((entry) => entry.assetIds),
+        };
+      }
       state.trace.push({ tool: name, args, result });
       return JSON.stringify(result);
     };

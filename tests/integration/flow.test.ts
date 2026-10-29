@@ -34,6 +34,7 @@ const config: AppConfig = {
   },
   memoryTtlMs: 60_000,
   dailyGenerationLimit: 20,
+  batchWindowMs: 0,
   maxInputImageBytes: 10_000_000,
   databasePath: ':memory:',
 };
@@ -65,7 +66,7 @@ describe('end-to-end flow through the webhook', () => {
       imageGenerator,
       modelProvider: { getModel: () => model },
     });
-    app = buildApp({ config, bot: services.bot, db: services.db });
+    app = buildApp({ config, bot: services.bot, db: services.db, pendingInputs: services.pendingInputs });
 
     await post(app, inbound({ id: 'wamid.0', type: 'text', text: { body: 'oi' } }));
     await app.drainMessageQueue();
@@ -107,7 +108,7 @@ describe('end-to-end flow through the webhook', () => {
       imageGenerator: new StubImageGenerator(),
       modelProvider: { getModel: () => model },
     });
-    app = buildApp({ config, bot: services.bot, db: services.db });
+    app = buildApp({ config, bot: services.bot, db: services.db, pendingInputs: services.pendingInputs });
 
     const body = inbound({ id: 'wamid.dup', type: 'text', text: { body: 'oi' } });
     await post(app, body);
@@ -125,7 +126,7 @@ describe('end-to-end flow through the webhook', () => {
       imageGenerator: new StubImageGenerator(),
       modelProvider: { getModel: () => new ScriptedModel([]) },
     });
-    app = buildApp({ config, bot: services.bot, db: services.db });
+    app = buildApp({ config, bot: services.bot, db: services.db, pendingInputs: services.pendingInputs });
 
     const body = inbound({ id: 'wamid.stranger', from: '15550000000', type: 'text', text: { body: 'oi' } });
     await post(app, body);

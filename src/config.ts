@@ -21,6 +21,7 @@ const environmentSchema = z.object({
 
   MEMORY_TTL_MINUTES: z.coerce.number().int().positive().default(15),
   DAILY_GENERATION_LIMIT: z.coerce.number().int().positive().default(20),
+  BATCH_WINDOW_SECONDS: z.coerce.number().int().min(0).max(120).default(5),
   MAX_INPUT_IMAGE_BYTES: z.coerce.number().int().positive().default(10_000_000),
 
   DATABASE_PATH: z.string().min(1).default('.data/sticker-agent.db'),
@@ -48,6 +49,7 @@ export interface AppConfig {
   };
   memoryTtlMs: number;
   dailyGenerationLimit: number;
+  batchWindowMs: number;
   maxInputImageBytes: number;
   databasePath: string;
 }
@@ -100,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     memoryTtlMs: values.MEMORY_TTL_MINUTES * 60_000,
     dailyGenerationLimit: values.DAILY_GENERATION_LIMIT,
+    batchWindowMs: values.BATCH_WINDOW_SECONDS * 1_000,
     maxInputImageBytes: values.MAX_INPUT_IMAGE_BYTES,
     databasePath: values.DATABASE_PATH,
   };
